@@ -92,6 +92,11 @@ ul {
   color: #777;
   margin-right: 4px;
 }
+
+#vomnibar li .audio {
+  margin-left: 6px;
+  font-size: 13px;
+}
 #vomnibar li .relevancy {
   position: absolute;
   right: 0;

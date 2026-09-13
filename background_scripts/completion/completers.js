@@ -47,6 +47,9 @@ export class Suggestion {
   deDuplicate = true;
   // The tab represented by this suggestion. Populated by TabCompleter.
   tabId;
+  // Whether the tab is currently playing audio (or is muted while doing so).
+  audible = false;
+  muted = false;
   // Whether this is a suggestion provided by a user's custom search engine.
   isCustomSearch;
   // Set by CommandCompleter.
@@ -93,6 +96,12 @@ export class Suggestion {
       faviconUrl.searchParams.set("size", "16");
       faviconHtml = `<img class="icon" src="${faviconUrl.toString()}" />`;
     }
+    let audioHtml = "";
+    if (this.muted) {
+      audioHtml = `<span class="audio" title="Muted">&#x1F507;</span>`;
+    } else if (this.audible) {
+      audioHtml = `<span class="audio" title="Playing audio">&#x1F50A;</span>`;
+    }
     if (this.isCustomSearch) {
       this.html = `\
 <div class="top-half">
@@ -125,7 +134,7 @@ export class Suggestion {
       this.html = `\
 <div class="top-half">
    <span class="source ${insertTextClass}">${insertTextIndicator}</span><span class="source">${this.description}</span>
-   <span class="title">${this.highlightQueryTerms(Utils.escapeHtml(this.title))}</span>
+   <span class="title">${this.highlightQueryTerms(Utils.escapeHtml(this.title))}</span>${audioHtml}
  </div>
  <div class="bottom-half">
   <span class="source no-insert-text">${insertTextIndicator}</span>${faviconHtml}<span class="url">${
@@ -606,6 +615,8 @@ export class TabCompleter {
           title: tab.title,
           tabId: tab.id,
           deDuplicate: false,
+          audible: tab.audible ?? false,
+          muted: tab.mutedInfo?.muted ?? false,
         });
         suggestion.relevancy = this.computeRelevancy(suggestion);
         return suggestion;
