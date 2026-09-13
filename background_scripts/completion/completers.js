@@ -57,6 +57,8 @@ export class Suggestion {
   isPrimarySuggestion = false;
   // The generated HTML string for showing this suggestion in the Vomnibar.
   html;
+  // The section this suggestion is rendered under in the Vomnibar.
+  group;
   searchUrl;
 
   constructor(options) {
@@ -718,6 +720,24 @@ SearchEngineCompleter.debug = false;
 // returns the top 10. All queries from the vomnibar come through a multi completer.
 const maxResults = 10;
 
+const groupOrder = ["Open tabs", "Bookmarks", "History", "Search", "Commands"];
+
+const suggestionGroup = (s) => {
+  switch (s.description) {
+    case "tab":
+      return "Open tabs";
+    case "bookmark":
+      return "Bookmarks";
+    case "history":
+    case "domain":
+      return "History";
+    case "command":
+      return "Commands";
+    default:
+      return "Search";
+  }
+};
+
 export class MultiCompleter {
   constructor(completers) {
     this.completers = completers;
@@ -789,6 +809,9 @@ export class MultiCompleter {
         completer.postProcessSuggestions(request, dedupedSuggestions);
       }
     }
+
+    for (const s of dedupedSuggestions) s.group = suggestionGroup(s);
+    dedupedSuggestions.sort((a, b) => groupOrder.indexOf(a.group) - groupOrder.indexOf(b.group));
 
     // Generate HTML for the remaining suggestions and return them.
     for (const s of dedupedSuggestions) {

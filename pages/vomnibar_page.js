@@ -152,7 +152,8 @@ class VomnibarUI {
     }
 
     // Highlight the selected entry.
-    for (const [i, el] of Object.entries(this.completionList.children)) {
+    const items = this.completionList.querySelectorAll("li:not(.group-header)");
+    for (const [i, el] of Object.entries(items)) {
       el.className = i == this.selection ? "selected" : "";
     }
   }
@@ -376,7 +377,17 @@ class VomnibarUI {
   }
 
   renderCompletions(completions) {
-    this.completionList.innerHTML = completions.map((c) => `<li>${c.html}</li>`).join("\n");
+    const showHeaders = new Set(completions.map((c) => c.group)).size > 1;
+    let group = null;
+    const html = [];
+    for (const c of completions) {
+      if (showHeaders && c.group !== group) {
+        group = c.group;
+        html.push(`<li class="group-header">${group}</li>`);
+      }
+      html.push(`<li>${c.html}</li>`);
+    }
+    this.completionList.innerHTML = html.join("\n");
     this.completionList.style.display = completions.length > 0 ? "block" : "";
   }
 
