@@ -383,7 +383,7 @@ class VomnibarUI {
     for (const c of completions) {
       if (showHeaders && c.group !== group) {
         group = c.group;
-        html.push(`<li class="group-header">${group}</li>`);
+        html.push(`<li class="group-header">${Utils.escapeHtml(group)}</li>`);
       }
       html.push(`<li>${c.html}</li>`);
     }

@@ -50,6 +50,8 @@ export class Suggestion {
   // Whether the tab is currently playing audio (or is muted while doing so).
   audible = false;
   muted = false;
+  // The title of the browser tab group this tab belongs to, if any. Populated by TabCompleter.
+  tabGroup;
   // Whether this is a suggestion provided by a user's custom search engine.
   isCustomSearch;
   // Set by CommandCompleter.
@@ -604,7 +606,11 @@ export class TabCompleter {
   async filter({ queryTerms }) {
     await bgUtils.tabRecency.init();
     // We search all tabs, not just those in the current window.
-    const tabs = await chrome.tabs.query({});
+    const [tabs, tabGroups] = await Promise.all([
+      chrome.tabs.query({}),
+      chrome.tabGroups?.query({}) ?? [],
+    ]);
+    const groupTitles = new Map(tabGroups.map((g) => [g.id, g.title || "Untitled group"]));
     const results = tabs.filter((tab) => ranking.matches(queryTerms, tab.url, tab.title));
     const suggestions = results
       .map((tab) => {
@@ -617,6 +623,7 @@ export class TabCompleter {
           deDuplicate: false,
           audible: tab.audible ?? false,
           muted: tab.mutedInfo?.muted ?? false,
+          tabGroup: groupTitles.get(tab.groupId),
         });
         suggestion.relevancy = this.computeRelevancy(suggestion);
         return suggestion;
@@ -730,8 +737,24 @@ SearchEngineCompleter.debug = false;
 // A completer which calls filter() on many completers, aggregates the results, ranks them, and
 // returns the top 10. All queries from the vomnibar come through a multi completer.
 const maxResults = 10;
+const maxTabResults = 20;
+const recentTabCount = 5;
 
 const groupOrder = ["Open tabs", "Bookmarks", "History", "Search", "Commands"];
+
+const sortByGroupOrder = (suggestions, order) =>
+  suggestions.sort((a, b) => order.indexOf(a.group) - order.indexOf(b.group));
+
+// In the tab-selection vomnibar with an empty query, tabs are already sorted by recency. Show the
+// most recently used tabs first, then each browser tab group, then the ungrouped tabs.
+const groupTabSuggestions = (suggestions) => {
+  suggestions.forEach((s, i) => {
+    s.group = i < recentTabCount ? "Recent" : (s.tabGroup ?? "Other tabs");
+  });
+  const order = [...new Set(suggestions.map((s) => s.group))].filter((g) => g != "Other tabs");
+  order.push("Other tabs");
+  sortByGroupOrder(suggestions, order);
+};
 
 const suggestionGroup = (s) => {
   switch (s.description) {
@@ -773,9 +796,7 @@ export class MultiCompleter {
 
     // The only UX where we support showing results when there are no query terms is via
     // Vomnibar.activateTabSelection, where we show the list of open tabs by recency.
-    const isTabCompleter = this.completers.length == 1 &&
-      this.completers[0] instanceof TabCompleter;
-    if (queryTerms.length == 0 && !isTabCompleter) {
+    if (queryTerms.length == 0 && !this.isTabCompleter()) {
       return [];
     }
 
@@ -795,6 +816,10 @@ export class MultiCompleter {
     return results;
   }
 
+  isTabCompleter() {
+    return this.completers.length == 1 && this.completers[0] instanceof TabCompleter;
+  }
+
   // Rank them, simplify the URLs, and de-duplicate suggestions with the same simplified URL.
   postProcessSuggestions(request, queryTerms, suggestions) {
     for (const s of suggestions) {
@@ -802,10 +827,12 @@ export class MultiCompleter {
     }
     suggestions.sort((a, b) => b.relevancy - a.relevancy);
 
+    const isTabOverview = this.isTabCompleter() && queryTerms.length == 0;
+    const limit = isTabOverview ? maxTabResults : maxResults;
     const seenUrls = new Set();
     const dedupedSuggestions = [];
     for (const s of suggestions) {
-      if (dedupedSuggestions.length === maxResults) break;
+      if (dedupedSuggestions.length === limit) break;
       if (s.deDuplicate) {
         const url = s.shortenUrl();
         if (seenUrls.has(url)) continue;
@@ -821,8 +848,12 @@ export class MultiCompleter {
       }
     }
 
-    for (const s of dedupedSuggestions) s.group = suggestionGroup(s);
-    dedupedSuggestions.sort((a, b) => groupOrder.indexOf(a.group) - groupOrder.indexOf(b.group));
+    if (isTabOverview) {
+      groupTabSuggestions(dedupedSuggestions);
+    } else {
+      for (const s of dedupedSuggestions) s.group = suggestionGroup(s);
+      sortByGroupOrder(dedupedSuggestions, groupOrder);
+    }
 
     // Generate HTML for the remaining suggestions and return them.
     for (const s of dedupedSuggestions) {

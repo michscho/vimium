@@ -1,7 +1,7 @@
 import "../test_helper.js";
 import { withPromise } from "../test_helper.js";
 import "../../../background_scripts/tab_recency.js";
-import "../../../background_scripts/bg_utils.js";
+import * as bgUtils from "../../../background_scripts/bg_utils.js";
 import "../../../background_scripts/completion/search_engines.js";
 import "../../../background_scripts/completion/search_wrapper.js";
 import * as userSearchEngines from "../../../background_scripts/user_search_engines.js";
@@ -352,6 +352,40 @@ context("multi completer", () => {
     assert.equal([], await filterCompleter(multiCompleter, []));
   });
 
+  should("section the tab overview into recent tabs, tab groups, and other tabs", async () => {
+    const tab = (id, groupId) => ({ url: `tab${id}.com`, title: `tab${id}`, id, groupId });
+    stub(chrome.tabs, "query", () => [
+      tab(1, -1),
+      tab(2, 7),
+      tab(3, 7),
+      tab(4, -1),
+      tab(5, 8),
+      tab(6, -1),
+      tab(7, 7),
+      tab(8, 8),
+    ]);
+    stub(chrome, "tabGroups", { query: () => [{ id: 7, title: "Work" }, { id: 8, title: "" }] });
+    stub(chrome.runtime, "getURL", returns("https://test/"));
+    // Most recent first: 8, 7, 6, ..., 1.
+    const counters = Object.fromEntries([1, 2, 3, 4, 5, 6, 7, 8].map((id) => [id, id]));
+    stub(bgUtils.tabRecency, "tabIdToCounter", counters);
+    stub(bgUtils.tabRecency, "counter", 9);
+    const results = await filterCompleter(new MultiCompleter([tabCompleter]), []);
+    assert.equal(
+      [
+        [8, "Recent"],
+        [7, "Recent"],
+        [6, "Recent"],
+        [5, "Recent"],
+        [4, "Recent"],
+        [3, "Work"],
+        [2, "Work"],
+        [1, "Other tabs"],
+      ],
+      results.map((s) => [s.tabId, s.group]),
+    );
+  });
+
   should("deduplicate suggestions with the same URL", async () => {
     const make = (url, relevancy) => new Suggestion({ url, relevancy, html: url });
     const fakeCompleter = {
@@ -435,6 +469,13 @@ context("tab completer", () => {
   should("return tabs by recency when query is empty", async () => {
     const results = await filterCompleter(completer, []);
     assert.equal(["tab1.com", "tab2.com"], results.map((tab) => tab.url));
+  });
+
+  should("attach the tab group title", async () => {
+    stub(chrome.tabs, "query", () => [{ url: "tab1.com", title: "tab1", id: 1, groupId: 7 }]);
+    stub(chrome, "tabGroups", { query: () => [{ id: 7, title: "Work" }] });
+    const results = await filterCompleter(completer, []);
+    assert.equal(["Work"], results.map((tab) => tab.tabGroup));
   });
 
   should("return matching tabs", async () => {
