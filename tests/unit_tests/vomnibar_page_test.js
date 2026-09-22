@@ -150,6 +150,6 @@ context("vomnibar page", () => {
     await ui.updateCompletions();
     assert.equal(1, ui.completionList.childNodes.length);
     const keys = Array.from(ui.completionList.querySelectorAll(".key")).map((x) => x.textContent);
-    assert.equal(["K", "gt", "<c-b>bn", "<c-b><c-b>n"], keys);
+    assert.equal(["K", "gt", "<c-b>n", "<c-b>bn", "<c-b><c-b>n"], keys);
   });
 });

@@ -46,6 +46,7 @@ const ActionPage = {
     }
 
     document.querySelector("#optionsLink").href = chrome.runtime.getURL("pages/options.html");
+    document.querySelector("#vimium-version").textContent = Utils.getCurrentVersion();
 
     const saveButton = document.querySelector("#save");
     saveButton.addEventListener("click", () => this.onSave());
